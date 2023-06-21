@@ -1,0 +1,761 @@
+---
+title: "全球性别比例研究"
+documentclass: ctexart
+geometry: "left=2.5cm,right=2cm,top=3cm,bottom=2.5cm"
+output:
+  rticles::ctex:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+classoption: "hyperref,"
+---
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(gghalves)
+library(ggridges)
+library(dplyr)
+library(ggrepel)
+library(corrplot)
+library(RColorBrewer)
+library(ggExtra)
+library(hexbin)
+library(lubridate)
+library(scales)
+library(ggmap)
+library(maps)
+library(RColorBrewer)
+library(mapproj)
+library(statebins)
+library(ggtext)
+library(palmerpenguins)
+library(cowplot)
+library(broom)
+library(igraph)
+library(ggraph)
+library(circlize)
+library(dendextend)
+library(plotly)
+library(networkD3)
+library(gganimate)
+library(htmlwidgets)
+library(gifski)
+library(tidytext)
+library(kableExtra)
+library(gt)
+library(ggwordcloud)
+
+My_palette1 = RColorBrewer::brewer.pal(6,"RdBu")
+My_palette2= rev(My_palette1)
+
+map_2020_color=c(My_palette1,"#A9A9A9")
+map_2019_color=c(My_palette2,"#A9A9A9")
+
+share_population_female =  read.csv('https://raw.githubusercontent.com/simon777777/R/main/share-population-female.csv',header = T)
+
+sex_ratio_at_birth<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-at-birth.csv',header = T)
+
+child_mortality_by_sex<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/child-mortality-by-sex.csv',header = T)
+
+infant_death_rates_by_cause_by_sex<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/infant-death-rates-by-cause-by-sex.csv',header = T)
+
+sex_ratio_at_birth_by_birth_order<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-at-birth-by-birth-order.csv',header = T)
+
+sex_ratio_at_birth_males_chao_et_al<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-at-birth-males-chao-et-al.csv',header = T)
+
+sex_ratio_at_birth_vs_five_years_old<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-at-birth-vs-five-years-old.csv',header = T)
+
+sex_ratio_at_five_years_old<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-at-five-years-old.csv',header = T)
+
+sex_ratio_by_age<- read.csv('https://raw.githubusercontent.com/simon777777/R/main/sex-ratio-by-age.csv',header = T)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+my_theme <- function () { 
+ theme_linedraw(base_size=11) +
+ theme(
+ plot.background = element_rect(fill = NA, color = NA),
+ plot.title = element_text(size = 18, hjust = 0, vjust = 0.5, 
+ face = "bold", margin = margin(b = 0.2, unit = "cm")),
+ plot.subtitle = element_text(size = 12, hjust = 0, vjust = 0.5, 
+ margin = margin(b = 0.2, unit = "cm")),
+ plot.caption = element_text(size = 7, hjust = 1, face = "italic", 
+ margin = margin(t = 0.1, unit = "cm")),
+ axis.ticks = element_blank(),
+ axis.text = element_text(size = 13),
+ legend.background = element_rect(fill = NA, color = NA),
+ legend.key = element_rect(fill = NA, color = NA),
+ panel.background = element_blank(),
+ panel.grid.major = element_line(color = "grey90", size = 0.3), 
+ panel.grid.minor = element_blank()
+ )
+}
+```
+
+# 数据介绍
+
+我们使用的数据来源于联合国官网和世界银行官网。数据包括以下信息：
+    所有国家从1960年到2020年的女性人口比例，
+    所有国家从1962年到2019年的新生儿性别比例，
+    所有国家从1950年到2015年在各个年龄段的性别比例，
+    所有国家从1962年到2019年的五岁孩子的性别比,
+    所有国家从1962年至2019年五岁以下的男孩和女孩的死亡率，
+    2019年全球因不同疾病导致的男婴和女婴死亡比例。
+    中国和韩国的第一胎到第四胎的新生儿的性别比。
+    
+# 全球性别比例概览
+
+## 全球不同地区的性别比例的差异
+
+```{r include=FALSE,warning=FALSE}
+world_map <-map_data("world")
+colnames(share_population_female)=c("Entity","Code","Year","female_ratio")
+
+#有一些名称和world map中的数据不统一，需要更换一下
+share_population_female<-share_population_female%>%
+  mutate(Entity=ifelse(Entity=="Democratic Republic of Congo","Democratic Republic of the Congo",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="Congo","Republic of Congo",Entity))%>%
+  mutate(Entity=ifelse(Entity=="United States","USA",Entity))%>%
+  mutate(Entity=ifelse(Entity=="United Kingdom","UK",Entity))%>%
+  mutate(Entity=ifelse(Entity=="Czechia","Czech Republic",Entity))%>%
+  mutate(Entity=ifelse(Entity=="Cote d'Ivoire","Ivory Coast",Entity))
+  
+  
+share_population_female_2020 <- share_population_female%>%
+  filter(Year==2020)%>%
+  mutate(female_ratio = round(female_ratio,2))
+
+loc<-(which(share_population_female_2020[,1]=="China"))
+
+add_Taiwan_2020<-c("Taiwan","TW",2020,share_population_female_2020[loc,4])
+share_population_female_2020<-rbind(share_population_female_2020,add_Taiwan_2020)
+
+
+share_population_female_2020_map<-world_map %>%
+  left_join(share_population_female_2020, by = c("region" = "Entity"))%>%
+  mutate(percentage = case_when( female_ratio <= 44 ~ "20-44%",
+                               female_ratio > 50 & female_ratio <= 52 ~ "50-52%",
+                               female_ratio > 46 & female_ratio <= 48 ~ "46-48%",
+                               female_ratio > 48 & female_ratio <= 50 ~ "48-50%",
+                               female_ratio > 50 & female_ratio <= 52 ~ "50-52%",
+                               female_ratio > 52 & female_ratio <= 54 ~ "52-54%",
+                               female_ratio >54~"54-56%",
+                               is.na(female_ratio)~"No data"))%>%
+  
+  mutate(female_ratio=paste(female_ratio,"%"))%>%
+  mutate(female_ratio=ifelse(female_ratio=="NA %","No data",female_ratio))%>%
+  select(long,lat,group,region,percentage,female_ratio)%>%
+  filter(!is.na(percentage))
+
+
+female_map_2020<-share_population_female_2020_map %>% 
+  filter(region!="Antarctica")%>%
+ ggplot(aes(x = long, y = lat, group = group, fill = percentage,label=region,
+             text= paste("female ratio:",female_ratio))) +
+ geom_polygon(color = "white",size=0.2) +
+ scale_fill_manual(values=map_2020_color) +
+ labs(title = "Percentage of female population,2020") +
+ theme_void() +
+ theme(plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+       legend.title = element_blank(),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+```
+
+```{r echo=FALSE,warning=FALSE}
+female_map_2020
+```
+
+在地图中的蓝色区域，女性人口比例大于50$\%$，而在红色区域，女性的人口比例小于50$\%$，颜色越深则代表女性人口比例偏离50$\%$的幅度越大。可以看到，女性人口比例低于50$\%$的区域主要是在亚洲，北非以及北欧，而其他区域的女性人口比例大多都大于50$\%$。
+  
+大部分地区的女性比例都位于48$\%$-52$\%$之间，只有少数几个地区的数据比较极端。中东地区的几个国家的女性人口比例低于44$\%$，其中阿曼苏丹国的女性人口只占总数的1/3，而阿拉伯联合酋长国的女性人口比例只有30.88$\%$。这是由于这些地方有大量的外来移民，且在移民中男性的占比非常高。根据《世界移民报告2017》，阿联酋在2017年的总人口中，有88.4$\%$都是外来移民，移民人口中女性的占比为25.3$\%$。在尼泊尔和几个东欧国家，女性人口的占比远大于男性。其中，尼泊尔是因为有大量的男性公民会去国外务工。而东欧则很可能是因为这些地区的女性预期寿命远高于男性。根据俄罗斯在2020年的女性预期寿命为77.6岁，而男性的预期寿命为66.9岁。
+
+## 不同年龄段的性别比例差异
+
+```{r include=FALSE,warning=FALSE}
+colnames(sex_ratio_by_age)<-c("Entity","Code","Year","100_years_old","15_years_old",
+                              "20_years_old","30_years_old","40_years_old",
+                        "50_years_old","60_years_old","70_years_old","80_years_old","90_years_old")
+sex_ratio_by_age11<-sex_ratio_by_age %>%
+  pivot_longer(ends_with("old"), names_to = "age",
+ values_to = "ratio", values_drop_na = TRUE)%>%
+  mutate(age=gsub("_"," ",age))%>%
+  group_by(age,Year)%>%
+  summarise(mean_ratio=mean(ratio))
+
+RdBu = RColorBrewer::brewer.pal(8,"RdBu")
+My_palette3=c("#2166AC",RdBu[1:7])
+```
+
+```{r include=FALSE,warning=FALSE}
+a<-
+sex_ratio_by_age11 %>%
+  filter(!(age %in% c("20 years old","15 years old")))%>%
+  mutate(label = if_else(Year==2015,age,NA_character_))%>%
+  ggplot(aes(x = Year, y = mean_ratio, color = age)) + 
+ geom_line(size=0.8) +
+  geom_point(size=1)+
+ scale_x_continuous(breaks = seq(1950, 2015, 5),limits=c(1950,2025)) +
+  scale_y_continuous(breaks=seq(30,110,10),limits=c(30,110),name="Sex ratio")+
+  scale_color_manual(values = My_palette3)+
+ labs(title = "Global average sex ratio by age",
+      subtitle="Measured by the number of men per 100 women at the same age ")+
+  geom_label_repel(aes(label =label),nudge_x=12) +
+  theme_classic()+
+  theme(plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        legend.position = "none",
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        axis.line = element_line(arrow = arrow(length = unit(0.3, 'cm'))))
+```
+
+```{r echo=FALSE,warning=FALSE}
+a
+```
+
+上图展示的是各个年龄段的性别比例（每100位女性所对应的同龄男性数量）。在50岁之前，性别比的数值在100附近，同龄的女性和男性数目相差不大。但从60岁开始，可以看到性别比例的值明显低于100了，且随着年龄的增长，100位女性所对应的同龄男性的数量在逐渐减少。可以看出在近现代，女性比男性更长寿。这可能是由于女性与男性生理上的差异，也可能来源于女性和男性后天的生活方式上的差异。
+
+## 不同国家的新生儿性别比例差异
+
+```{r include=FALSE,warning=FALSE}
+colnames(sex_ratio_at_birth)=c("Entity","Code","Year","sex_ratio")
+sex_ratio_at_birth<-sex_ratio_at_birth%>%
+  mutate(Entity=ifelse(Entity=="Democratic Republic of Congo","Democratic Republic of the Congo",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="Congo","Republic of Congo",Entity))%>%
+  mutate(Entity=ifelse(Entity=="United States","USA",Entity))%>%
+  mutate(Entity=ifelse(Entity=="United Kingdom","UK",Entity))%>%
+  mutate(Entity=ifelse(Entity=="Czechia","Czech Republic",Entity))%>%
+  mutate(Entity=ifelse(Entity=="Cote d'Ivoire","Ivory Coast",Entity))
+
+sex_ratio_at_birth_2019<-sex_ratio_at_birth %>%
+  filter(Year==2019)%>%
+  mutate(sex_ratio = round(sex_ratio,2))
+
+loc_2019 =(which(sex_ratio_at_birth_2019[,1]=="China"))
+
+add_Taiwan_2019<-c("Taiwan","TW",2019,sex_ratio_at_birth_2019[loc_2019,4])
+sex_ratio_at_birth_2019<-rbind(sex_ratio_at_birth_2019,add_Taiwan_2019)
+
+sex_ratio_at_birth_2019_map<-world_map %>%
+  left_join(sex_ratio_at_birth_2019, by = c("region" = "Entity"))%>%
+  mutate(sex_ratio_at_birth = case_when( sex_ratio>=101 &sex_ratio < 102 ~ "101-102",
+                               sex_ratio >= 102 & sex_ratio < 105 ~ "102-105",
+                               sex_ratio >= 105 & sex_ratio < 107 ~ "105-107",
+                               sex_ratio >= 107 & sex_ratio < 109 ~ "107-109",
+                               sex_ratio > 109 & sex_ratio < 111 ~ "109-111",
+                               sex_ratio > 111 & sex_ratio < 113 ~ "111-113",
+                               is.na(sex_ratio)~"No data"))%>%
+  mutate(sex_ratio=ifelse(is.na(sex_ratio),"No data",sex_ratio))%>%
+  mutate(text= if_else(sex_ratio !="No data",paste(sex_ratio,"newborn boys per 100 newborn girls"),"No data"))%>%
+  select(long,lat,group,region,sex_ratio_at_birth,sex_ratio,text)%>%
+  filter(!is.na(sex_ratio_at_birth))
+
+
+sex_ratio_map<-sex_ratio_at_birth_2019_map%>% 
+  filter(region!="Antarctica")%>%
+ ggplot(aes(x = long, y = lat, group = group, fill = sex_ratio_at_birth,label=region,
+             text=text)) +
+ geom_polygon(color = "white",size=0.2) +
+ scale_fill_manual(values=map_2019_color) +
+ labs(title = "Sex ratio at birth,2019", 
+      subtitle = "Measured by the number of newborn boys per 100 newborn girls") +
+  theme_void()+
+  theme(plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        legend.title = element_blank(),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+
+```
+
+
+```{r echo=FALSE,warning=FALSE}
+sex_ratio_map
+```
+
+上图展示的是2019年各个地区的新生儿性别比例，我们用每100名女孩所对应的男孩数量来衡量新生儿性别比，可以看到所有地区的男性新生儿数量都高于女性新生儿。根据研究，在自然状态下，男性新生儿的数量会略微大于女性新生儿的数量，每出生100个女孩，对应会有大约102-107个男孩出生。虽然在受孕时候，得到男孩或女孩的概率是相等的，但是在怀孕期间女胎的死亡率也会略高于男胎，这就导致自然状态下，男性的出生数量会大于女性。
+
+
+从图中可以看到，大部分地区的新生儿性别比都处于正常的区间内（102-107）。但在亚洲的部分地区，新生儿性别比超出了107，其中越南，阿塞拜疆以及中国大陆地区的性别比超过了111。这样的偏差，很大程度上是因为对男孩的偏好而导致的人工流产。在被人工流产的胎儿中，女胎的数量高于男胎，最终就会导致出生性别比的失调。很多原因导致了这些地区的部分父母对男孩的偏好。首先是姓氏，以中国为例，尽管法律中规定新生儿可以随父姓或随母性，但目前大部分的新生儿还是随父姓，根据《2020年全国姓名报告》，新生儿随母性和随父姓的比例为1：12。部分人持有的观念是只有生了儿子，姓氏才算是传承下去了。第二个原因是养儿防老的观念，很多父母在年老之后会和儿子生活在一起，这种观念会让他们想生出男孩来保障自己的老年生活。
+
+# 新生儿性别比例
+
+在中亚和南亚以及非洲的一些国家，女性人口比例明显较低，我们首先研究各个国家新生儿性别比例情况，探究是否是由于新生儿性别比例导致的失衡。
+
+在没有性别歧视和人工选择的情况下，受孕时的性别比例是相等的。但是研究发现，在整个怀孕的过程中，女性的流产概率要略高于男性。这说明自然情况下，男性人口应当占比略大于女性人口，但是某些国家的现实性别比例要超出合理的范围，这说明存在性别歧视的情况。
+
+## 典型国家新生儿性别比例
+
+我们选取1962年至2019年，来自各大洲的六个国家，中国、韩国、美国、南非、津巴布韦以及亚美尼亚的新生儿比例数据进行分析。
+
+```{r include=FALSE,warning=FALSE}
+colnames(sex_ratio_at_birth)=c("Entity","Code","Year","sex_ratio")
+
+selected_countries1 <-c("China","South Korea","South Africa",
+                       "United States","Armenia","Zimbabwe")
+
+sex_ratio_at_birth_change1<-
+  sex_ratio_at_birth %>%
+  filter(Entity %in% selected_countries1)%>%
+  mutate(label=if_else(Year==2019,Entity,NA_character_))
+
+sex_ratio_change1<-sex_ratio_at_birth_change1 %>%
+  ggplot(aes(x = Year, y = sex_ratio,color = Entity)) +
+  geom_line(size = 1) +
+  geom_point(size=1.3)+
+  geom_label_repel(aes(label = label), size = 4,hjust=0.8,vjust=0.6) +
+  labs(y = "Sex ratio", x = "Year",
+  title = "Sex ratio at birth from 1962 to 2019",
+  subtitle="Measured by the number of newborn boys per 100 newborn girls") +
+  scale_color_manual(values = My_palette1,name=NULL)+
+  scale_x_continuous(breaks =
+                       c(seq(1962,2002,5),seq(2007,2019,4)),limits=c(1962,2025)) +
+  scale_y_continuous(breaks = seq(90,118,3))+
+  theme_classic()+
+  theme(legend.position = "none",
+    axis.line = element_line(arrow = arrow(length = unit(0.3, 'cm'))),
+    plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+```
+
+```{r echo=FALSE,warning=FALSE}
+sex_ratio_change1
+```
+
+从图上可以看出，中国、韩国、亚美尼亚三个国家新生儿的性别比例，是要远高于来自其他州的国家。其中，亚美尼亚在2002年性别比例达到最高，平均每100名新生女婴就有118个新生男婴，而后比例逐渐下降；中国性别比例在2007年达到顶峰，平均每100名新生女婴就有117个新生男婴出生，而后比例迅速下降；韩国性别比例在1992年达到顶峰，平均每100名新生女婴就有114个新生男婴出生，而后比例迅速下降，在2012年之后稳定在105左右。而南非和津巴布韦性别比一直维持在100：103左右，美国则稳定在100：105左右。
+
+由于某些国家新生儿性别比例明显高于其他国家，所以我们猜测这些国家可能存在性别歧视和人工流产的情况。
+
+## 出生顺序对新生儿性别比的影响
+
+亚洲一些国家的新生女孩的人数要明显少于其他地区的国家，所以我们选取中国和韩国两个国家的数据进行进一步探究。
+
+### 中国
+
+首先我们选取了中国1981年到2010年孩子出生顺序与性别比例的数据。
+
+```{r include=FALSE,warning=FALSE}
+data0<-sex_ratio_at_birth_by_birth_order
+colnames(data0)[4:7] <- c("First.child","Second.child","Third.child","Fourth.child")
+aa<-data0 %>%
+  filter(Entity=="South Korea") %>%
+  pivot_longer(First.child:Fourth.child,values_to = "value",names_to = "Order") 
+
+aa = cbind(aa, replicate(1,aa$Order))
+
+colnames(aa)[6] <- c("Order.name")
+
+bb<-data0 %>%
+  filter(Entity=="China") %>%
+  pivot_longer(First.child:Fourth.child,values_to = "value",names_to = "Order") 
+
+bb = cbind(bb, replicate(1,bb$Order))
+
+colnames(bb)[6] <- c("Order.name")
+china<-
+bb %>%
+  mutate(Order.name=if_else(Order=="First.child","First child",Order.name),
+         Order.name=if_else(Order=="Second.child","Second child",Order.name),
+         Order.name=if_else(Order=="Third.child","Third child",Order.name),
+         Order.name=if_else(Order=="Fourth.child","Fourth child",Order.name),
+  ) %>%
+  mutate(label=if_else(Year==2010,Order.name,NA_character_))%>%
+  ggplot(aes(x = Year, y = value, group = Order, color = Order)) +
+  geom_line(size=1.0) +
+  geom_point(size=1.0) +
+  geom_label_repel(aes(label = label), size = 4,hjust=1) +
+  #geom_text(aes(label = label),size=4.5,hjust=0) +
+  scale_x_continuous(breaks = seq(1980, 2010, 5),limits = c(1980,2015)) +
+  scale_y_continuous(breaks = seq(100, 160, 10),limits = c(100,160),expand = c(0, 0)) +
+  scale_color_brewer(palette = "RdBu",guide="none") +
+  labs(title = "Sex ratio at birth by birth order,China,1981 to 2010", 
+       subtitle = "Sex ratio at birth measures the number of male births per 100 female births.",
+       x = NULL, y = NULL) +
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                   angle=360,lineheight=113,family = "serif"),
+        legend.position = c(0.3, 0.7),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey90",size = 0.3,linetype = 'dashed'),
+        panel.border = element_blank(),
+        axis.ticks.x = element_line(color = "black", size = 0.3)
+  ) 
+```
+
+```{r echo=FALSE,warning=FALSE}
+china
+```
+
+从图上我们可以发现出生顺序与性别比例有着明显的关系。第一个孩子的性别比例在110：100左右波动，从1982年开始性别比例基本呈上升趋势。而第二胎和第三胎的性别比例明显高于第一胎，从1980年开始性别比例均不断上升，且都在在2000年达到顶峰，分别为152：100和159：100，这一数值要明显高于正常水平。2000年后，二胎的性别比例逐渐下降，三胎的性别比例在2000年后均高于152：100。
+
+1979年中国第五届全国人民代表大会第二次会议提出“鼓励一对夫妇只生育一个孩子”，1982年9月，党的十二大把计划生育确定为基本国策，同年12月写入宪法。中国的传统观念认为，新生儿随父姓，男性才是能够为家族传宗接代的人，所以中国存在重男轻女的观念。在计划生育政策实行之后，为了能够生出男性，人们进行人工流产的可能性就会增大，所以第一胎性别比例在不断增加。而二胎三胎的男性比例增加，也说明了中国父母更加偏爱男孩，人工流产的可能性在增大。
+
+### 韩国
+
+其次我们选取了韩国1970年到2017年孩子出生顺序与性别比例的数据。
+
+```{r include=FALSE,warning=FALSE}
+korean<-
+aa %>%
+  mutate(Order.name=if_else(Order=="First.child","First child",Order.name),
+         Order.name=if_else(Order=="Second.child","Second child",Order.name),
+         Order.name=if_else(Order=="Third.child","Third child",Order.name),
+         Order.name=if_else(Order=="Fourth.child","Fourth child",Order.name),
+  ) %>%
+  mutate(label=if_else(Year==1993,Order.name,NA_character_))%>%
+  ggplot(aes(x = Year, y = value, group = Order, color = reorder(Order,-value))) +
+  geom_line(size=1.0) +
+  geom_point(size=1.0) +
+  #geom_label_repel(aes(label = label), size = 4) +
+  #geom_text(aes(label = label),size=4.5,hjust=0,nudge_x=0.1,nudge_y=0) +
+  scale_x_continuous(breaks = seq(1970, 2020, 10),limits = c(1970,2020)) +
+  scale_y_continuous(breaks = seq(100, 250, 20),limits = c(100,250),expand = c(0, 0)) +
+  scale_color_brewer(palette = "RdBu",name=NULL) +
+  labs(title = "Sex ratio at birth by birth order,South Korea,1970 to 2017", 
+       subtitle = "Sex ratio at birth measures the number of male births per 100 female births.",
+       x = NULL, y = NULL) +
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        #legend.position = c(0.3, 0.7),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey90",size = 0.3,linetype = 'dashed'),
+        panel.border = element_blank(),
+        axis.ticks.x = element_line(color = "black", size = 0.3)
+  ) 
+```
+
+```{r echo=FALSE,warning=FALSE}
+korean
+```
+
+首先，在1970年到1979年，我们可以观察到性别顺序并没有很大程度上的改变性别比例，性别比例基本稳定在109：100左右。1980年开始，第一胎和第二胎的性别比例较为稳定，基本稳定在105到110之间，在1985年到1995年出现小幅上升。而三胎以及四胎的性别比例迅速增加，在1993年达到顶峰。此时，三胎中每一百个新生女婴就有205个男婴出生，而四胎中每一百个新生女婴就有247个男婴出生，这一数值远远超出了正常水平。在1993年之后，三胎和四胎的性别比例迅速下降，在2013年左右下降到正常水平，并稳定在107：100左右。
+
+从三胎和四胎性别比例严重失衡的情况来看，韩国父母对于男性有着明显的偏好，且韩国传统的“男尊女卑”的观念较为严重，存在较为严重的性别歧视和产前人工流产的行为。但是，自2013年后，性别比例明显下降并趋于正常水平，说明韩国传统家庭观念在不断改变，两性平等意识正在不断加强。
+
+##  国家政策的影响
+
+从之前的讨论中我们知道，亚洲国家基本上父母更加偏爱儿子，并且三胎、四胎的性别比例明显增加，所以说明存在性别歧视和人工流产的问题。为了解决这一问题，许多国家颁布了相关禁令，我们希望探究这些禁令是否可以有效地改进这一状况。
+
+我们选择已经颁布产前性别鉴定相关禁令的国家进行研究，分别是中国、印度和韩国。其中，韩国在1987年颁布了产前性别鉴定的禁令，中国在1994年颁布的《母婴保护法》中规定，禁止进行产前性别鉴定，印度也在同年颁布类似禁令。
+
+```{r include=FALSE,warning=FALSE}
+colnames(sex_ratio_at_birth)=c("Entity","Code","Year","sex_ratio")
+
+selected_countries <-c("China","India","South Korea")
+
+sex_ratio_at_birth_change<-
+  sex_ratio_at_birth %>%
+  filter(Entity %in% selected_countries)%>%
+  mutate(label=if_else(Year==2019,Entity,NA_character_),
+         label1=if_else(Year>1986&Entity== "South Korea","2","1"),
+         label2=if_else(Year>1993&Entity== "China","2",label1),
+         label3=if_else(Year>1993&Entity== "India","2",label2))
+
+sex_ratio_change<-sex_ratio_at_birth_change %>%
+  ggplot(aes(x = Year , y = sex_ratio,color = Entity)) +
+  geom_line(size = 1) +
+  geom_point(aes(shape=label3,size=label3))+
+  geom_label_repel(aes(label = label), size = 4,hjust=0.8,vjust=0.6) +
+  labs(y = "Sex ratio", x = "Year",
+  title = "Sex ratio at birth from 1962 to 2019",
+  subtitle="Measured by the number of newborn boys per 100 newborn girls") +
+  scale_color_manual(values = c("#CA0020","#F4A582","#0571B0"),
+                     name=NULL
+                     )+
+  guides(color=FALSE,size=FALSE) +
+  scale_x_continuous(breaks =
+                       c(seq(1962,2002,5),seq(2007,2019,4)),limits=c(1962,2025)) +
+  scale_y_continuous(breaks = seq(90,118,3))+
+  scale_size_discrete(range=c(1.3,2))+
+  scale_shape_discrete(name=NULL,labels=c("Before Ban","After Ban")) +
+  theme_classic()+
+  theme(axis.line = element_line(arrow = arrow(length = unit(0.3, 'cm'))),
+        plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+```
+
+```{r echo=FALSE, warning=FALSE}
+sex_ratio_change
+```
+
+从图上我们可以看出，韩国在禁令颁布后的5年内性别比例仍然在上升，在1992年达到了每一百个新生女婴有115个新生男婴的性别比例。而在中国和印度，禁令颁布十年后，性别比例仍然没有下降的趋势。但是，长期来看，三个国家的新生儿性别比例存在下降的趋势。所以，我们有理由猜测，禁令能够有效地遏制性别比例失衡的情况，但是并不能够完全杜绝性别选择的现象。
+
+# 儿童时期性别比例
+
+我们探索从出生到满5岁这个成长阶段影响性别比例的因素，发现男性从出生到5岁这个生长阶段更容易受到伤害，这说明男性从出生到5岁期间的死亡率更高。
+
+## 各大洲的男女童(<5岁)死亡比例
+
+下图是根据1962年到2019年的婴幼儿死亡比例加权平均之后的数据绘制而成。
+
+```{r include=FALSE,warning=FALSE}
+colnames(child_mortality_by_sex)=c("Entity","Code","Year",
+                               "Female","Male","p","Continent")
+
+selected_continent <-c("Africa","South America","Asia","Europe",
+                       "North America","Oceania")
+child_mortality<-
+child_mortality_by_sex %>%
+  select(Entity,Female,Male,Continent,p) %>%
+  filter(!is.na(Female)& !is.na(Male)&!is.na(p)) %>%
+  group_by(Entity) %>%
+  mutate(Female = weighted.mean(Female,p),
+         Male = weighted.mean(Male,p),
+         Continent= if_else(Continent %in% selected_continent,
+                            Continent,NA_character_)) %>%
+  filter(!is.na(Continent))
+
+child_mortality_p<-
+child_mortality %>%
+  ggplot(aes(x = Female , y = Male,color = Continent)) +
+  geom_jitter(size=1.0,alpha=0.5)+
+  geom_abline(slope = 1,intercept = 0,color="steelblue",linetype = "dashed") +
+  scale_color_manual(values = My_palette1,name=NULL)+
+  labs(y = "Male child mortality", x = "Female child mortality",
+  title = "Weighted Mean Child mortality by sex, 1962 to 2019",
+  subtitle="Child mortality measures the share of children who die before they are five years old") +
+  scale_x_continuous(breaks = c(seq(0,25,5)),
+                     labels = c("0%","5%","10%","15%","20%","25%")) +
+  scale_y_continuous(breaks = c(seq(0,25,5)),
+                     labels = c("0%","5%","10%","15%","20%","25%"))+
+  theme_void()+
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+```
+
+```{r echo=FALSE, warning=FALSE}
+child_mortality_p
+```
+
+该散点图中的一个点代表一个国家，不同颜色代表不同大洲，蓝色虚线代表y=x这条线。正好落在这条虚线上的国家的男性婴幼儿死亡比率和女性婴幼儿死亡比率相等。可以看出，不管是哪个大洲，他们的绝大多数国家都落在了蓝色虚线的上方，即世界上大多数国家的男性婴幼儿死亡比率更高。
+
+## 不同原因导致的男女婴(<1岁)死亡率
+
+为什么男性婴幼儿的死亡比率普遍更高呢？由此我们观察不同原因导致的男女婴死亡率。
+
+```{r include=FALSE,warning=FALSE}
+colnames(infant_death_rates_by_cause_by_sex)=c("Entity","Code","Year",
+                               "Male","Female","Continent")
+
+infant_death_rates<-
+infant_death_rates_by_cause_by_sex %>%
+  select(Entity,Female,Male,Year) %>%
+  filter(!is.na(Female)& !is.na(Male)&Year==2019) 
+
+infant_death_rates_p<-
+infant_death_rates %>%
+  ggplot(aes(x = Female , y = Male)) +
+  geom_point(size=1.5,alpha=0.7)+
+  geom_abline(slope = 1,intercept = 0,color="steelblue",linetype = "dashed") +
+  geom_label_repel(aes(label = Entity), color="steelblue", 
+                   size = 2.5,hjust=0.3,vjust=0.5,segment.color = NA) +
+  scale_color_manual(values = My_palette1,name=NULL)+
+  labs(y = "Male infant death rates", x = "Female infant death rates",
+  title = "Infant death rates by sex, 1962 to 2019",
+  subtitle="Infant mortality rates are the number of deaths of infants, measured per 100,000") +
+  theme_void()+
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue",
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"))
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+infant_death_rates_p
+```
+
+如图所示为1962-2019年间男女婴幼儿的死亡率，此处的死亡率是指每10万个婴儿里死亡的男婴或者女婴数量，横坐标衡量的是女婴的死亡率，纵坐标衡量的是男婴的死亡率。图中每个点的标签表示的是不同的致死因，例如早产，下呼吸道感染，因窒息或创伤引起的脑部损伤，出生缺陷等等。图中的虚线是y=x这条线，可以看出大多数的点位于虚线上方，这说明这些主要死因在男婴的群体中更为常见，同时可以看出男婴在两个关键方面更容易受到伤害-患出生并发症和传染病的风险更高。
+
+## 童年时期的性别比例
+
+随着婴幼儿的生长发育，到了童年的后期也就是五岁的时候，实际性别比例又会如何变化呢？接下来我们探索童年时期的性别比例。
+
+### 1950-2015年的时间序列图
+
+首先我们选取了四个国家1950-2015年的五岁儿童性别比数据。
+
+```{r include=FALSE,warning=FALSE}
+data1 <- sex_ratio_at_five_years_old
+
+colnames(data1)[4] <- c("ratio")
+
+world_map <-map_data("world")
+
+selected_countries<-c("China","India","South Korea","Bangladesh")
+
+sex_at_five_years_old <- 
+  data1 %>%
+  filter(Entity %in% selected_countries) %>%
+  mutate(label=if_else(Year==2015,Entity,NA_character_))%>%
+  ggplot(aes(x = Year, y = ratio, group = Entity, color = Entity)) +
+  geom_line(size=1.0) +
+  geom_point(size=1.0) +
+  geom_label_repel(aes(label = label), size = 4,hjust=1) +
+  scale_x_continuous(breaks = seq(1950, 2015, 10),limits = c(1950,2020)) +
+  scale_y_continuous(breaks = seq(90, 115, 5),limits = c(90,120),expand = c(0, 0)) +
+  scale_color_brewer(palette = "RdBu",guide="none") +
+  labs(title = "Sex ratio of five-year-olds, 1950 to 2015", 
+       subtitle = "Sex ratio is the number of boys per 100 girls at five-years-old.",
+       x = NULL, y = NULL) +
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                   angle=360,lineheight=113,family = "serif"),
+        legend.position = c(0.3, 0.7),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey90",size = 0.3,linetype = 'dashed'),
+        panel.border = element_blank(),
+        axis.ticks.x = element_line(color = "black", size = 0.3)
+  ) 
+```
+
+```{r echo=FALSE, warning=FALSE}
+sex_at_five_years_old
+```
+
+该图展示了中国、印度、韩国以及孟加拉国四个亚洲国家的五岁儿童的性别比变化。不难看出，在很长的一段时间内，中国、印度 韩国的性别比都比较高。
+
+### 全球不同国家5岁儿童性别比
+我们选取全球不同国家5岁儿童的性别比数据进行分析。
+
+```{r include=FALSE,warning=FALSE}
+My_palette1 = RColorBrewer::brewer.pal(6,"RdBu")
+My_palette2= rev(My_palette1)
+
+map_2015_color=c(My_palette1,"#A9A9A9")
+map_2019_color=c(My_palette2,"#A9A9A9")
+
+world_map <-map_data("world")
+
+sex_ratio_of_five <- 
+  data1 %>%
+  mutate(Entity=ifelse(Entity=="Democratic Republic of Congo","Democratic Republic of the Congo",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="Congo","Republic of Congo",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="United States","USA",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="United Kingdom","UK",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="Czechia","Czech Republic",Entity)) %>%
+  mutate(Entity=ifelse(Entity=="Cote d'Ivoire","Ivory Coast",Entity)) 
+
+sex_ratio_of_five_2015 <- sex_ratio_of_five %>%
+  filter(Year==2015)%>%
+  mutate(ratio = round(ratio,2))
+
+sex_ratio_of_five_2015_map <- world_map %>%
+  left_join(sex_ratio_of_five_2015, by = c("region" = "Entity")) %>%
+  mutate(percentage = case_when(ratio <= 100 ~ "97-100%",
+                                ratio > 100 & ratio <= 102 ~ "100-102%",
+                                ratio > 102 & ratio <= 104 ~ "102-104%",
+                                ratio > 104 & ratio <= 106 ~ "104-106%",
+                                ratio > 106 & ratio <= 110 ~ "106-110%",
+                                ratio > 110 ~ "110-117%",
+                                is.na(ratio)~"No data"
+                                ))%>%
+  mutate(ratio=paste(ratio,"%"))%>%
+  mutate(ratio=ifelse(ratio=="NA %","No data",ratio))%>%
+  select(long,lat,group,region,percentage,ratio)%>%
+  filter(!is.na(percentage)) %>%
+  mutate(percentage=factor(percentage))
+
+sex_ratio_of_five_2015_map0<-
+sex_ratio_of_five_2015_map %>% 
+  filter(region!="Antarctica")%>%
+  ggplot(aes(x = long, y = lat, group = group, fill = percentage,label=region,
+             text= paste("sex ratio:",ratio))) +
+  geom_polygon(color = "white",size=0.2) +
+  scale_fill_manual(values=map_2015_color,breaks=c("110-117%","106-110%","104-106%","102-104%","100-102%","97-100%","No data"),
+                    labels=c("110-117%","106-110%","104-106%","102-104%","100-102%","97-100%","No data")) +
+  labs(title = "Sex ratio of five-year-olds,2015",
+       subtitle = "Sex ratio is the number of boys per 100 girls at five-years-old."
+      ) +
+  theme_void() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                   angle=360,lineheight=113,family = "serif"),
+        legend.position = "right",
+        legend.title = element_blank(),
+        panel.background = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r echo=FALSE,warning=FALSE}
+sex_ratio_of_five_2015_map0
+```
+
+从图上可以看出，就像出生时的性别比例一样，几个亚洲国家的比率最高，且男孩比例高于我们的预期。在中国，每100名五岁女孩中有近117名男孩；在印度，每100名女孩中就有超过111名男孩。
+
+### 出生时性别比VS5岁时性别比
+
+接下来，我们观察出生时的性别比与5岁时性别比的散点图。
+
+```{r include=FALSE,warning=FALSE}
+data2 <- sex_ratio_at_birth_vs_five_years_old
+
+colnames(data2)[4:5]<-c("Sex.ratio.at.birth","Sex.ratio.by.age.five")
+
+sex_data <-
+data2 %>%
+  filter(Year==2015 & Continent!="" & !is.na(Sex.ratio.at.birth) & !is.na(Sex.ratio.by.age.five)) %>%
+  #mutate(label=Entity)%>%
+  ggplot(aes(x = Sex.ratio.by.age.five, y = Sex.ratio.at.birth, group = Continent, color = Continent,label = Entity)) +
+  geom_jitter(size=1.0,alpha=0.5) +
+  geom_abline(slope = 1.0,intercept = 0,color = "grey",linetype='dashed') +
+  #geom_text(aes(label = label),size=3.5,hjust=0,nudge_y = 0.3) +
+  scale_y_continuous(breaks = seq(100, 118, 2),limits = c(100,118),expand = c(0, 0)) +
+  scale_color_brewer(palette = "RdBu",name=NULL) +
+  labs(title = "Sex ratio at birth vs. at five years old,2015",
+       subtitle = "Sex ratio measured as the number of male  per 100 female.",
+       x = "Sex ratio at five years old", y = "Sex ratio at birth") +
+  my_theme() +
+  theme(plot.title=element_text(face="bold.italic", color="steelblue", 
+                                angle=360,lineheight=113,family = "serif"),
+        plot.subtitle=element_text(face="bold.italic", color="steelblue", 
+                                   angle=360,lineheight=113,family = "serif"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "grey90",size = 0.3,linetype = 'dashed'),
+        panel.border = element_blank(),
+        axis.ticks.x = element_line(color = "black", size = 0.3)
+  ) 
+
+```
+
+
+```{r echo=FALSE,warning=FALSE}
+sex_data
+```
+
+图上的虚线仍是y=x这条线，正好落在虚线上的国家出生时与5岁时的性别比相同。正如我们所看到的，大多数国家都位于这条线之上：这就意味着新生儿中男性的比例高于5岁儿童中男性的比例。这也恰巧印证了上一节中提到的男性婴幼儿的死亡比率更高，即男性从出生到5岁这个生长阶段更容易受到伤害。
+
+# 总结
+
+整体来看，本文研究过程是从全球性别比例概览开始。首先，我们发现亚洲、非洲一些国家女性人口占比明显较低，于是想要探究造成这种现象的原因。其次，我们考虑是否在新生儿时期就存在性别比例失衡的状况。在这一部分中不难发现，产前性别确定和选择性堕胎会在相当程度上影响新生儿的性别比例。最后，我们探索从出生到满5岁这个成长阶段影响性别比例的因素，并且得出了男性从出生到5岁期间死亡率更高的结论。
+
+从世界各国的角度来看，大多数国家的男女比例处于一个大致平衡且合理的状态—即男性占比稍高于女性。而在某些国家，出生时的性别比例比自然发生的性别比例要倾斜得多。不管是当前还是过去，这种不平衡现象在亚洲和北非都尤为常见。有明确的证据表明，重男轻女的国家会通过产前性别确定和选择性堕胎来选择性别。禁止性别决定扫描和性别选择性堕胎可能限制了一些国家出生时性别比的提高，但并没有完全解决这个问题，实现全球范围的性别比例平衡仍然任重道远。
+
+
+# 问题修改
+
+过度绘制—— 修改geom_point为geom_jitter，并将alpha值降低为0.5
+
+
+百分比不统一问题—— 采用百分比的数据为儿童死亡率，而采用数值的为对应每一百个新生儿新生女婴的数量，不能统一

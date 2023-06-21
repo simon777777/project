@@ -1,0 +1,16 @@
+About Dataset
+
+# Context
+Motivated by Gregory Smith's web scrape of VGChartz Video Games Sales, this data set simply extends the number of variables with another web scrape from Metacritic. Unfortunately, there are missing observations as Metacritic only covers a subset of the platforms. Also, a game may not have all the observations of the additional variables discussed below. Complete cases are ~ 6,900
+
+# Content
+Alongside the fields: Name, Platform, Year of Release, Genre, Publisher, NASales, EUSales, JPSales, OtherSales, Global_Sales, 
+we also have:-
+- Criticscore - Aggregate score compiled by Metacritic staff Criticcount - The number of critics used in coming up with the Criticscore Userscore - Score by Metacritic's subscribers
+- Usercount - Number of users who gave the userscore
+- Developer - Party responsible for creating the game
+- Rating - The ESRB ratings
+
+# Acknowledgements
+This repository, https://github.com/wtamu-cisresearch/scraper, after a few adjustments worked extremely well!
+
