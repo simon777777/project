@@ -38,7 +38,7 @@ ggplot(dca_cph)
 ###计算AUDC
 AUDC_dca <- function(x,y){
   dca_cph = dca(x,times=y)
-  return(list(dca_cph,AUDC(dca_cph)))
+  return(list(dca_cph,AUDC(dca_cph)，rFP.p100(dca_cph)))
   }
 
 AUDC_dca(cph1,2)[2]
